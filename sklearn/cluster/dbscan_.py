@@ -54,7 +54,8 @@ def dbscan(X, eps=0.5, min_samples=5, metric='minkowski', metric_params=None,
 
         .. versionadded:: 0.19
 
-    algorithm : {'auto', 'ball_tree', 'kd_tree', 'brute'}, optional
+    algorithm : {'auto', 'ball_tree', 'kd_tree', 'brute'} \
+                or neighbors estimator, optional
         The algorithm to be used by the NearestNeighbors module
         to compute pointwise distances and find nearest neighbors.
         See NearestNeighbors module documentation for details.
@@ -196,7 +197,8 @@ class DBSCAN(BaseEstimator, ClusterMixin):
 
         .. versionadded:: 0.19
 
-    algorithm : {'auto', 'ball_tree', 'kd_tree', 'brute'}, optional
+    algorithm : {'auto', 'ball_tree', 'kd_tree', 'brute'} \
+                or neighbors estimator, optional
         The algorithm to be used by the NearestNeighbors module
         to compute pointwise distances and find nearest neighbors.
         See NearestNeighbors module documentation for details.
@@ -280,8 +282,11 @@ class DBSCAN(BaseEstimator, ClusterMixin):
 
         """
         X = check_array(X, accept_sparse='csr')
-        clust = dbscan(X, sample_weight=sample_weight,
-                       **self.get_params())
+        # Filter out custom algorithm parameters that are already included in
+        # the self.algorithm object
+        pars = {key: val for key, val in self.get_params().items()
+                if not key.startswith('algorithm_')}
+        clust = dbscan(X, sample_weight=sample_weight, **pars)
         self.core_sample_indices_, self.labels_ = clust
         if len(self.core_sample_indices_):
             # fix for scipy sparse indexing issue

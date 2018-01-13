@@ -23,6 +23,8 @@ from sklearn.utils.testing import assert_warns
 from sklearn.utils.testing import assert_warns_message
 from sklearn.utils.testing import ignore_warnings
 from sklearn.utils.validation import check_random_state
+from sklearn.datasets import make_blobs
+from sklearn.base import BaseEstimator
 
 rng = np.random.RandomState(0)
 # load and shuffle iris dataset
@@ -1325,3 +1327,97 @@ def test_pairwise_boolean_distance():
     nn1 = NN(metric="jaccard", algorithm='brute').fit(X)
     nn2 = NN(metric="jaccard", algorithm='ball_tree').fit(X)
     assert_array_equal(nn1.kneighbors(X)[0], nn2.kneighbors(X)[0])
+
+
+class MyRadiusNNAlgorithm(object):
+    def fit(self, X):
+        self._fitted = True
+
+    def query_radius(self, X, r, return_distance=True):
+        """ Compute radius KNN with brute force"""
+        D = pairwise_distances(X, X)
+        ind = D.argsort(axis=1)
+        D_mask = (D <= r)
+        ind_res = np.empty(D.shape[0], dtype='object')
+        dist = np.empty(D.shape[0], dtype='object')
+        for k in range(D.shape[0]):
+            ind_mask = D_mask[k, ind[k]]
+            ind_res[k] = ind[k, ind_mask]
+            dist[k] = D[k, ind_res[k]]
+
+        if return_distance:
+            return ind, dist
+        return ind
+
+
+class MyKNNAlgorithm(object):
+    def fit(self, X):
+        self._fitted = True
+
+    def query(self, X, k, return_distance=True):
+        """ Compute KNN with brute force"""
+        D = pairwise_distances(X, X)
+        ind = D.argsort(axis=1)
+        ind = ind[:k]
+        dist = D[np.arange(D.shape[0], ind)]
+        if return_distance:
+            return dist, ind
+        return ind
+
+
+@ignore_warnings
+def test_neighbors_estimator_as_algorithm():
+    centers = [[-10, -10], [10, 10]]
+    X, y = make_blobs(centers=centers, random_state=41)
+
+    alg = MyRadiusNNAlgorithm()
+    est = neighbors.NearestNeighbors(n_neighbors=1, algorithm=alg)
+    est.fit([[0], [1]])
+    assert hasattr(alg, '_fitted')
+    for radius in [5, 100]:
+        # check algorithm is queried and parameter is passed
+        dist, ind = est.radius_neighbors([[0]], radius=radius,
+                                         return_distance=True)
+        assert_array_equal(dist[0][0], radius)
+
+    assert_array_equal(ind[0],
+                       est.radius_neighbors([[0]], return_distance=False)[0])
+
+    alg = MyKNNAlgorithm()
+    est = neighbors.NearestNeighbors(algorithm=alg)
+    est.fit([[0], [1]])
+    # check alg is a clone
+    assert not hasattr(alg, '_fitted')
+    for n_neighbors in [5, 100]:
+        # check algorithm is queried and parameter is passed
+        dist, ind = est.kneighbors([[0]], n_neighbors=n_neighbors,
+                                   return_distance=True)
+        assert_array_equal(dist[0][0], n_neighbors)
+
+    assert_array_equal(ind[0],
+                       est.kneighbors([[0]], return_distance=False)[0])
+
+
+@ignore_warnings
+def test_lshforest_as_algorithm():
+    centers = [[-10, -10], [10, 10]]
+    X, y = make_blobs(centers=centers, random_state=41)
+    assert_array_equal(np.unique(y), [0, 1])
+    algorithm = neighbors.LSHForest()
+    # monkeypatch LSHForest with "*query" methods
+    algorithm.query = algorithm.kneighbors
+    algorithm.radius_query = algorithm.radius_neighbors
+    # not fitted should raise exception
+    assert_raises(Exception, algorithm.kneighbors, centers)
+
+    for cls in [neighbors.KNeighborsClassifier,
+                neighbors.RadiusNeighborsClassifier,
+                neighbors.KNeighborsRegressor,
+                neighbors.RadiusNeighborsRegressor]:
+        est = cls(algorithm=algorithm)
+        est.fit(X, y)
+        prediction = est.predict(centers)
+        assert_array_almost_equal(prediction, [0, 1])
+
+        # algorithm should have been cloned, hence still not fitted
+        assert_raises(Exception, algorithm.query, centers)

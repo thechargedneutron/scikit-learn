@@ -50,7 +50,8 @@ class KNeighborsRegressor(NeighborsBase, KNeighborsMixin,
 
         Uniform weights are used by default.
 
-    algorithm : {'auto', 'ball_tree', 'kd_tree', 'brute'}, optional
+    algorithm : {'auto', 'ball_tree', 'kd_tree', 'brute'} \
+                or neighbors estimator, optional
         Algorithm used to compute the nearest neighbors:
 
         - 'ball_tree' will use :class:`BallTree`
@@ -58,9 +59,13 @@ class KNeighborsRegressor(NeighborsBase, KNeighborsMixin,
         - 'brute' will use a brute-force search.
         - 'auto' will attempt to decide the most appropriate algorithm
           based on the values passed to :meth:`fit` method.
+        - A neighbors estimator (such as an :class:`LSHForest` instance)
+          should support ``fit`` and at least one of ``kneighbors(X, k)``
+          and ``radius_neighbors(X, r)``. The ``metric`` parameter will
+          be ignored, in favor of the neighbors estimator's metric.
 
-        Note: fitting on sparse input will override the setting of
-        this parameter, using brute force.
+        Note: fitting on sparse input will use brute force instead of
+        ``ball_tree`` or ``kd_tree``.
 
     leaf_size : int, optional (default = 30)
         Leaf size passed to BallTree or KDTree.  This can affect the
@@ -206,7 +211,8 @@ class RadiusNeighborsRegressor(NeighborsBase, RadiusNeighborsMixin,
 
         Uniform weights are used by default.
 
-    algorithm : {'auto', 'ball_tree', 'kd_tree', 'brute'}, optional
+    algorithm : {'auto', 'ball_tree', 'kd_tree', 'brute'} \
+                or neighbors estimator, optional
         Algorithm used to compute the nearest neighbors:
 
         - 'ball_tree' will use :class:`BallTree`
@@ -214,9 +220,13 @@ class RadiusNeighborsRegressor(NeighborsBase, RadiusNeighborsMixin,
         - 'brute' will use a brute-force search.
         - 'auto' will attempt to decide the most appropriate algorithm
           based on the values passed to :meth:`fit` method.
+        - A neighbors estimator (such as an :class:`LSHForest` instance)
+          should support ``fit`` and at least one of ``kneighbors(X, k)``
+          and ``radius_neighbors(X, r)``. The ``metric`` parameter will
+          be ignored, in favor of the neighbors estimator's metric.
 
-        Note: fitting on sparse input will override the setting of
-        this parameter, using brute force.
+        Note: fitting on sparse input will use brute force instead of
+        ``ball_tree`` or ``kd_tree``.
 
     leaf_size : int, optional (default = 30)
         Leaf size passed to BallTree or KDTree.  This can affect the

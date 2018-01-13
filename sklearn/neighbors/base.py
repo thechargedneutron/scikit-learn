@@ -8,6 +8,7 @@
 # License: BSD 3 clause (C) INRIA, University of Amsterdam
 import warnings
 from abc import ABCMeta, abstractmethod
+import pickle
 
 import numpy as np
 from scipy.sparse import csr_matrix, issparse
@@ -115,14 +116,22 @@ class NeighborsBase(six.with_metaclass(ABCMeta, BaseEstimator)):
         self.metric_params = metric_params
         self.p = p
         self.n_jobs = n_jobs
-        self._check_algorithm_metric()
 
-    def _check_algorithm_metric(self):
-        if self.algorithm not in ['auto', 'brute',
-                                  'kd_tree', 'ball_tree']:
-            raise ValueError("unrecognized algorithm: '%s'" % self.algorithm)
+        self._fit_X = None
+        self._tree = None
+        self._fit_method = None
+        # validate here as well as fit() for backwards compatibility
+        self._validate_params()
 
-        if self.algorithm == 'auto':
+    def _validate_params(self):
+        algorithm = self.algorithm
+        metric = self.metric
+        if algorithm not in ['auto', 'brute',
+                             'kd_tree', 'ball_tree'] \
+           and not hasattr(algorithm, 'fit'):
+            raise ValueError("unrecognized algorithm: '%s'" % algorithm)
+
+        if algorithm == 'auto':
             if self.metric == 'precomputed':
                 alg_check = 'brute'
             elif (callable(self.metric) or
@@ -133,8 +142,12 @@ class NeighborsBase(six.with_metaclass(ABCMeta, BaseEstimator)):
         else:
             alg_check = self.algorithm
 
-        if callable(self.metric):
-            if self.algorithm == 'kd_tree':
+
+        if hasattr(alg_check, 'fit'):
+            # metric is ignored
+            pass
+        elif callable(metric):
+            if algorithm == 'kd_tree':
                 # callable metric is only valid for brute force and ball_tree
                 raise ValueError(
                     "kd_tree algorithm does not support callable metric '%s'"
@@ -155,7 +168,8 @@ class NeighborsBase(six.with_metaclass(ABCMeta, BaseEstimator)):
             raise ValueError("p must be greater than one for minkowski metric")
 
     def _fit(self, X):
-        self._check_algorithm_metric()
+        self._validate_params()
+
         if self.metric_params is None:
             self.effective_metric_params_ = {}
         else:
@@ -205,7 +219,7 @@ class NeighborsBase(six.with_metaclass(ABCMeta, BaseEstimator)):
         if n_samples == 0:
             raise ValueError("n_samples must be greater than 0")
 
-        if issparse(X):
+        if issparse(X) and not hasattr(self.algorithm, 'fit'):
             if self.algorithm not in ('auto', 'brute'):
                 warnings.warn("cannot use tree with sparse input: "
                               "using brute force")
@@ -248,6 +262,11 @@ class NeighborsBase(six.with_metaclass(ABCMeta, BaseEstimator)):
                                 **self.effective_metric_params_)
         elif self._fit_method == 'brute':
             self._tree = None
+        elif hasattr(self.algorithm, 'fit'):
+            # check that custom NN algorithm is picklable
+            pickle.loads(pickle.dumps(self.algorithm))
+            self._tree = self.algorithm
+            self._tree.fit(X)
         else:
             raise ValueError("algorithm = '%s' not recognized"
                              % self.algorithm)
@@ -373,8 +392,9 @@ class KNeighborsMixin(object):
             else:
                 result = neigh_ind
 
-        elif self._fit_method in ['ball_tree', 'kd_tree']:
-            if issparse(X):
+        elif self._fit_method in ['ball_tree', 'kd_tree'] \
+                or hasattr(self.algorithm, 'fit'):
+            if issparse(X) and not hasattr(self.algorithm, 'fit'):
                 raise ValueError(
                     "%s does not work with sparse matrices. Densify the data, "
                     "or set algorithm='brute'" % self._fit_method)
@@ -614,8 +634,9 @@ class RadiusNeighborsMixin(object):
             else:
                 results = neigh_ind
 
-        elif self._fit_method in ['ball_tree', 'kd_tree']:
-            if issparse(X):
+        elif self._fit_method in ['ball_tree', 'kd_tree'] \
+                or hasattr(self.algorithm, 'fit'):
+            if issparse(X) and not hasattr(self.algorithm, 'fit'):
                 raise ValueError(
                     "%s does not work with sparse matrices. Densify the data, "
                     "or set algorithm='brute'" % self._fit_method)
